@@ -30,7 +30,7 @@ Z-Score是一种常用于异常值检测的统计方法。它通过将数据点�
 在本插件中,超过 2 倍标准差的数据点将被认为是可疑，超过 3 倍标准差的数据点将被认为是异常。
 
 ##### 适用场景
-Z-Score 算法适用于数据分布近似正态的情况，但对于明显偏离正态分布的数据集可能效果较差。`,
+Z-Score 算法是基于正态分布的统计性质设计的，对于正态分布的数据集，它的效果通常较为稳健和准确。但对于明显偏离正态分布的数据集可能效果较差。`,
     },
   },
   en: {
@@ -65,7 +65,7 @@ Z-Score is a statistical method commonly used for outlier detection. It compares
 In this plugin, data points that are more than 2 times the standard deviation are considered suspicious, and data points that are more than 3 times the standard deviation are considered abnormal.
 
 ##### Applicable Scenarios
-The Z-Score algorithm is suitable for data sets with approximately normal distribution, but it may perform poorly for data sets that are obviously deviated from normal distribution.`,
+The Z-Score algorithm is designed based on the statistical properties of the normal distribution, and its results are usually more robust and accurate for normally distributed datasets. However, it may be less effective for datasets that significantly deviate from the normal distribution.`,
     },
   },
 };
