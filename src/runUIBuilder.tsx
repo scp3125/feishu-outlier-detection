@@ -55,6 +55,7 @@ function newDetecte(
   t: TFunction<"translation", undefined>
 ) {
   return async function (params: FormParams) {
+    uiBuilder.markdown(t("description"));
     const {
       table,
       view,
