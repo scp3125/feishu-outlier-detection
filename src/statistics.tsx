@@ -2,16 +2,19 @@ import * as stats from "simple-statistics";
 import {
   FieldType,
   INumberField,
+  IRecord,
+  ISelectFieldOption,
   ISingleSelectField,
   ITable,
   bitable,
   checkers,
 } from "@lark-base-open/js-sdk";
+import _ from "lodash";
 
 export const Z_SCORE = "z-score";
 export const IQR = "IQR";
 
-export interface dict {
+export interface Dict {
   normal: string;
   suspicious: string;
   abnormal: string;
@@ -20,7 +23,7 @@ export interface dict {
 
 async function createResultField(
   table: ITable,
-  dict: dict,
+  dict: Dict,
   resultFieldName: string
 ) {
   const fiedlId = await table.addField({
@@ -42,8 +45,12 @@ async function createResultField(
       color: 17,
     },
   ]);
-  // console.log(await field.getOptions());
   return field;
+}
+
+interface NumberRecord {
+  id: string;
+  value: number;
 }
 
 export async function detectField(
@@ -51,30 +58,34 @@ export async function detectField(
   viewId: string,
   fieldId: string,
   method: string,
-  dict: dict
+  dict: Dict
 ) {
   // get table and view
   const table = await bitable.base.getTableById(tableId);
   const view = await table.getViewById(viewId);
 
-  // get values
-  const dataField = await table.getFieldById<INumberField>(fieldId);
-  const dataFieldName = await dataField.getName();
-  const valueList = await dataField.getFieldValueList();
+  // get number fields and values
+  const records = await getAllRecords(table, view.id, []);
+  const numberRecords = new Array<NumberRecord>();
   const values = new Array<number>();
-  for (const value of valueList) {
-    if (checkers.isNumber(value.value)) {
-      values.push(value.value);
+  for (const record of records) {
+    if (record.recordId === undefined) {
+      continue;
+    }
+    const value = record.fields[fieldId];
+    if (checkers.isNumber(value)) {
+      numberRecords.push({
+        id: record.recordId,
+        value: value,
+      });
+      values.push(value);
     }
   }
 
-  // if no value, return
-  if (values.length === 0) {
-    return;
-  }
-
-  // create result field
-  const resultFieldName = dataFieldName + dict.fieldSuffix;
+  // get or create result field
+  const field = await table.getFieldById<INumberField>(fieldId);
+  const fieldName = await field.getName();
+  const resultFieldName = fieldName + dict.fieldSuffix;
   let resultField;
   if (await isFieldExist(table, resultFieldName)) {
     resultField = await table.getFieldByName<ISingleSelectField>(
@@ -84,49 +95,36 @@ export async function detectField(
     resultField = await createResultField(table, dict, resultFieldName);
   }
 
-  // calculate mean and std
-  const mean = stats.mean(values);
-  const std = stats.standardDeviation(values);
-  const q1 = stats.quantile(values, 0.25);
-  const q3 = stats.quantile(values, 0.75);
-  const iqr = q3 - q1;
-  const lowerBound1 = q1 - 1.5 * iqr;
-  const upperBound1 = q3 + 1.5 * iqr;
-  const lowerBound2 = q1 - 3 * iqr;
-  const upperBound2 = q3 + 3 * iqr;
-
   // detect records
-  const viewRecordIds = await view.getVisibleRecordIdList();
-  const promises = new Array<Promise<any>>();
-  for (const recordId of viewRecordIds) {
-    if (recordId === undefined) {
-      continue;
-    }
-    switch (method) {
-      case Z_SCORE:
-        promises.push(
-          zScoreDetect(dataField, resultField, dict, recordId, mean, std)
-        );
-        break;
-      case IQR:
-        promises.push(
-          IqrDetect(
-            dataField,
-            resultField,
-            dict,
-            recordId,
-            lowerBound1,
-            upperBound1,
-            lowerBound2,
-            upperBound2
-          )
-        );
-        break;
-      default:
-        break;
-    }
+  const options = await resultField.getOptions();
+  const updateRecords = detectRecords(
+    resultField.id,
+    options,
+    method,
+    dict,
+    numberRecords,
+    values
+  );
+
+  // update records in chunks
+  const updateRecordsChunks = _.chunk(updateRecords, 5000);
+  for (const updateRecordsChunk of updateRecordsChunks) {
+    await table.setRecords(updateRecordsChunk);
   }
-  await Promise.all(promises);
+}
+
+async function getAllRecords(
+  table: ITable,
+  viewId: string,
+  records: IRecord[]
+) {
+  const recordsRes = await table.getRecords({ viewId: viewId, pageSize: 5000 });
+  records.push(...recordsRes.records);
+  if (recordsRes.hasMore) {
+    const moreRecords = await getAllRecords(table, viewId, records);
+    records.push(...moreRecords);
+  }
+  return records;
 }
 
 async function isFieldExist(table: ITable, fieldName: string) {
@@ -139,41 +137,89 @@ async function isFieldExist(table: ITable, fieldName: string) {
   return false;
 }
 
-async function zScoreDetect(
-  dataField: INumberField,
-  resultField: ISingleSelectField,
-  dict: dict,
-  recordId: string,
-  mean: number,
-  std: number
+function detectRecords(
+  resultFieldId: string,
+  options: ISelectFieldOption[],
+  method: string,
+  dict: Dict,
+  numberRecords: NumberRecord[],
+  values: number[]
 ) {
-  const value = await dataField.getValue(recordId);
-  const zScore = stats.zScore(value, mean, std);
+  // calculate indicators
+  const mean = stats.mean(values);
+  const std = stats.standardDeviation(values);
+  const q1 = stats.quantile(values, 0.25);
+  const q3 = stats.quantile(values, 0.75);
+  const iqr = q3 - q1;
+  const lowerBound1 = q1 - 1.5 * iqr;
+  const upperBound1 = q3 + 1.5 * iqr;
+  const lowerBound2 = q1 - 3 * iqr;
+  const upperBound2 = q3 + 3 * iqr;
+
+  const updateRecords = new Array<IRecord>();
+  for (const record of numberRecords) {
+    let result: string;
+    switch (method) {
+      case Z_SCORE:
+        result = zScoreDetect(dict, mean, std, record.value);
+        break;
+      case IQR:
+        result = IQRDetect(
+          dict,
+          lowerBound1,
+          upperBound1,
+          lowerBound2,
+          upperBound2,
+          record.value
+        );
+        break;
+      default:
+        throw new Error("unknown method");
+    }
+
+    const resultIdMap = new Map<string, string>();
+    for (const option of options) {
+      resultIdMap.set(option.name, option.id);
+    }
+
+    updateRecords.push({
+      recordId: record.id,
+      fields: {
+        [resultFieldId]: {
+          id: resultIdMap.get(result) as string,
+          text: result,
+        },
+      },
+    });
+  }
+
+  return updateRecords;
+}
+
+function zScoreDetect(dict: Dict, mean: number, std: number, x: number) {
+  const zScore = stats.zScore(x, mean, std);
   if (zScore > 3 || zScore < -3) {
-    await resultField.setValue(recordId, dict.abnormal);
+    return dict.abnormal;
   } else if (zScore > 2 || zScore < -2) {
-    await resultField.setValue(recordId, dict.suspicious);
+    return dict.suspicious;
   } else {
-    await resultField.setValue(recordId, dict.normal);
+    return dict.normal;
   }
 }
 
-async function IqrDetect(
-  dataField: INumberField,
-  resultField: ISingleSelectField,
-  dict: dict,
-  recordId: string,
+function IQRDetect(
+  dict: Dict,
   lowerBound1: number,
   upperBound1: number,
   lowerBound2: number,
-  upperBound2: number
+  upperBound2: number,
+  x: number
 ) {
-  const value = await dataField.getValue(recordId);
-  if (value > upperBound2 || value < lowerBound2) {
-    await resultField.setValue(recordId, dict.abnormal);
-  } else if (value > upperBound1 || value < lowerBound1) {
-    await resultField.setValue(recordId, dict.suspicious);
+  if (x > upperBound2 || x < lowerBound2) {
+    return dict.abnormal;
+  } else if (x > upperBound1 || x < lowerBound1) {
+    return dict.suspicious;
   } else {
-    await resultField.setValue(recordId, dict.normal);
+    return dict.normal;
   }
 }

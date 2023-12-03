@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/lodash": "^4.14.202",
     "@types/react": "^18.0.15",
     "@types/react-dom": "^18.0.6",
     "@vitejs/plugin-react": "^2.0.0",
@@ -25,6 +26,7 @@
     "esbuild": "^0.19.7",
     "i18next": "^23.5.1",
     "i18next-browser-languagedetector": "^7.1.0",
+    "lodash": "^4.17.21",
     "normalize.css": "^8.0.1",
     "react-i18next": "^13.2.2",
     "simple-statistics": "^7.8.3"
