@@ -26,8 +26,8 @@ export default async function (
         form.select("algorithm", {
           label: t("selectAlgorithm"),
           options: [
-            { label: "IQR", value: IQR },
-            { label: "Z-Score", value: Z_SCORE },
+            { label: t("IQR"), value: IQR },
+            { label: t("zScore"), value: Z_SCORE },
           ],
           defaultValue: "IQR",
         }),
