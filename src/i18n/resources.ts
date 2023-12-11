@@ -5,7 +5,7 @@ const resources = {
       selectView: "选择视图",
       selectField: "选择字段",
       selectAlgorithm: "选择检测算法",
-      zScore: "Z-Score(适用于正态分布)",
+      zScore: "Z-Score（适用于正态分布）",
       IQR: "IQR（适用于非正态分布）",
       button: "检测",
       normal: "正常",
