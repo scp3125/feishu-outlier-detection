@@ -118,7 +118,10 @@ async function getAllRecords(
   viewId: string,
   records: IRecord[]
 ) {
-  const recordsRes = await table.getRecords({ viewId: viewId, pageSize: 5000 });
+  const recordsRes = await table.getRecordsByPage({
+    viewId: viewId,
+    pageSize: 200,
+  });
   records.push(...recordsRes.records);
   if (recordsRes.hasMore) {
     const moreRecords = await getAllRecords(table, viewId, records);
