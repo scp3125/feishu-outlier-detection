@@ -116,15 +116,17 @@ export async function detectField(
 async function getAllRecords(
   table: ITable,
   viewId: string,
-  records: IRecord[]
+  records: IRecord[],
+  pageToken?: number
 ) {
   const recordsRes = await table.getRecordsByPage({
     viewId: viewId,
     pageSize: 200,
+    pageToken: pageToken,
   });
   records.push(...recordsRes.records);
   if (recordsRes.hasMore) {
-    const moreRecords = await getAllRecords(table, viewId, records);
+    const moreRecords = await getAllRecords(table, viewId, records, pageToken);
     records.push(...moreRecords);
   }
   return records;
