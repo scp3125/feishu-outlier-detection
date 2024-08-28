@@ -124,9 +124,15 @@ async function getAllRecords(
     pageSize: 200,
     pageToken: pageToken,
   });
+  console.log(recordsRes);
   records.push(...recordsRes.records);
   if (recordsRes.hasMore) {
-    const moreRecords = await getAllRecords(table, viewId, records, pageToken);
+    const moreRecords = await getAllRecords(
+      table,
+      viewId,
+      records,
+      recordsRes.pageToken
+    );
     records.push(...moreRecords);
   }
   return records;
